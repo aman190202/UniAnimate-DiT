@@ -231,7 +231,7 @@ if __name__ == "__main__":
     # Save the video
     output_path = os.path.join(output_dir, "output.mp4")
     print(f"Saving video to: {output_path}")
-    save_video(video_out, output_path)
+    save_video(video_out, output_path, fps=15, quality=5)
     print(f"Video saved successfully to: {output_path}")
 
     # Verify the file was created

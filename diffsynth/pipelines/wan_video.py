@@ -656,7 +656,7 @@ class WanUniAnimateVideoPipeline(BasePipeline):
         input_video=None,
         denoising_strength=1.0,
         seed=None,
-        rand_device="cpu",
+        rand_device="cuda",
         height=480,
         width=832,
         num_frames=81,
