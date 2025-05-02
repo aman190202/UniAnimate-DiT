@@ -208,8 +208,8 @@ if __name__ == "__main__":
         negative_prompt="细节模糊不清，字幕，作品，画作，画面，静止，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，杂乱的背景，三条腿，背景人很多，倒着走",
         input_image=ref_frame,
         num_inference_steps=50,
-        cfg_scale=1.5,  # slow
-        # cfg_scale=1.0, # fast
+        # cfg_scale=1.5,  # slow
+        cfg_scale=1.0, # fast
         seed=seed,
         tiled=True,
         dwpose_data=dwpose_data,
