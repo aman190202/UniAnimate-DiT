@@ -36,12 +36,11 @@ misc_size = [height, width]
 model_manager = ModelManager(device="cuda")
 model_manager.load_models(
     ["./Wan2.1-I2V-14B-720P/models_clip_open-clip-xlm-roberta-large-vit-huge-14.pth"],
-    torch_dtype=torch.float32, # Image Encoder is loaded with float32
+    torch_dtype=torch.float32,  # Image Encoder is loaded with float32
 )
 model_manager.load_models(
     [
         [
-            
             "./Wan2.1-I2V-14B-720P/diffusion_pytorch_model-00001-of-00007.safetensors",
             "./Wan2.1-I2V-14B-720P/diffusion_pytorch_model-00002-of-00007.safetensors",
             "./Wan2.1-I2V-14B-720P/diffusion_pytorch_model-00003-of-00007.safetensors",
@@ -49,15 +48,16 @@ model_manager.load_models(
             "./Wan2.1-I2V-14B-720P/diffusion_pytorch_model-00005-of-00007.safetensors",
             "./Wan2.1-I2V-14B-720P/diffusion_pytorch_model-00006-of-00007.safetensors",
             "./Wan2.1-I2V-14B-720P/diffusion_pytorch_model-00007-of-00007.safetensors",
-
         ],
         "./Wan2.1-I2V-14B-720P/models_t5_umt5-xxl-enc-bf16.pth",
         "./Wan2.1-I2V-14B-720P/Wan2.1_VAE.pth",
     ],
-    torch_dtype=torch.bfloat16, # You can set `torch_dtype=torch.float8_e4m3fn` to enable FP8 quantization.
+    torch_dtype=torch.bfloat16,  # You can set `torch_dtype=torch.float8_e4m3fn` to enable FP8 quantization.
 )
 
-model_manager.load_lora_v2("./checkpoints/UniAnimate-Wan2.1-14B-Lora-12000.ckpt", lora_alpha=1.0)
+model_manager.load_lora_v2(
+    "./checkpoints/UniAnimate-Wan2.1-14B-Lora-12000.ckpt", lora_alpha=1.0
+)
 
 pipe = WanUniAnimateVideoPipeline.from_model_manager(
     model_manager, torch_dtype=torch.bfloat16, device="cuda"
@@ -209,7 +209,7 @@ if __name__ == "__main__":
         input_image=ref_frame,
         num_inference_steps=50,
         # cfg_scale=1.5,  # slow
-        cfg_scale=1.0, # fast
+        cfg_scale=1.0,  # fast
         seed=seed,
         tiled=True,
         dwpose_data=dwpose_data,
@@ -224,10 +224,21 @@ if __name__ == "__main__":
     for ii in range(len(video)):
         ss = video[ii]
         video_out.append(image_compose_width(video_out_condition[ii], ss))
+
+    # Create output directory if it doesn't exist
     os.makedirs(output_dir, exist_ok=True)
-    save_video(
-        video_out,
-        os.path.join(output_dir, "output.mp4"),
-        fps=15,
-        quality=5,
+
+    # Save the video
+    output_path = os.path.join(output_dir, "output.mp4")
+    print(f"Saving video to: {output_path}")
+    save_video(video_out, output_path)
+    print(f"Video saved successfully to: {output_path}")
+
+    # Verify the file was created
+    if not os.path.exists(output_path):
+        raise Exception(f"Failed to save video to {output_path}")
+
+    print(
+        f"Video generation completed. Output file exists: {os.path.exists(output_path)}"
     )
+    print(f"Output directory contents: {os.listdir(output_dir)}")
