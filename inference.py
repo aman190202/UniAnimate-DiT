@@ -25,22 +25,23 @@ import cv2
 import sys
 
 
-height = 832
-width = 480
+height = 1280
+width = 720
 seed = 0
 max_frames = 81
 use_teacache = False
 
 misc_size = [height, width]
 
-model_manager = ModelManager(device="cpu")
+model_manager = ModelManager(device="cuda")
 model_manager.load_models(
     ["./Wan2.1-I2V-14B-720P/models_clip_open-clip-xlm-roberta-large-vit-huge-14.pth"],
-    torch_dtype=torch.float32,  # Image Encoder is loaded with float32
+    torch_dtype=torch.float32, # Image Encoder is loaded with float32
 )
 model_manager.load_models(
     [
         [
+            
             "./Wan2.1-I2V-14B-720P/diffusion_pytorch_model-00001-of-00007.safetensors",
             "./Wan2.1-I2V-14B-720P/diffusion_pytorch_model-00002-of-00007.safetensors",
             "./Wan2.1-I2V-14B-720P/diffusion_pytorch_model-00003-of-00007.safetensors",
@@ -48,16 +49,15 @@ model_manager.load_models(
             "./Wan2.1-I2V-14B-720P/diffusion_pytorch_model-00005-of-00007.safetensors",
             "./Wan2.1-I2V-14B-720P/diffusion_pytorch_model-00006-of-00007.safetensors",
             "./Wan2.1-I2V-14B-720P/diffusion_pytorch_model-00007-of-00007.safetensors",
+
         ],
         "./Wan2.1-I2V-14B-720P/models_t5_umt5-xxl-enc-bf16.pth",
         "./Wan2.1-I2V-14B-720P/Wan2.1_VAE.pth",
     ],
-    torch_dtype=torch.bfloat16,  # You can set `torch_dtype=torch.float8_e4m3fn` to enable FP8 quantization.
+    torch_dtype=torch.bfloat16, # You can set `torch_dtype=torch.float8_e4m3fn` to enable FP8 quantization.
 )
 
-model_manager.load_lora_v2(
-    "./checkpoints/UniAnimate-Wan2.1-14B-Lora-12000.ckpt", lora_alpha=1.0
-)
+model_manager.load_lora_v2("./checkpoints/UniAnimate-Wan2.1-14B-Lora-12000.ckpt", lora_alpha=1.0)
 
 pipe = WanUniAnimateVideoPipeline.from_model_manager(
     model_manager, torch_dtype=torch.bfloat16, device="cuda"
