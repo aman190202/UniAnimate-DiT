@@ -227,12 +227,7 @@ if __name__ == "__main__":
     os.makedirs(output_dir, exist_ok=True)
     save_video(
         video_out,
-        os.path.join(
-            output_dir,
-            "video_480P_{}_{}.mp4".format(
-                ref_image_path.split("/")[-1], pose_file_path.split("/")[-1]
-            ),
-        ),
+        os.path.join(output_dir, "output.mp4"),
         fps=15,
         quality=5,
     )
