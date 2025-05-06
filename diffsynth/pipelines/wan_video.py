@@ -7,6 +7,7 @@ from ..models.wan_video_image_encoder import WanImageEncoder
 from ..schedulers.flow_match import FlowMatchScheduler
 from .base import BasePipeline
 from ..prompters import WanPrompter
+import torchvision.transforms.functional as TF
 import torch, os
 from einops import rearrange
 import numpy as np
@@ -645,6 +646,54 @@ class WanUniAnimateVideoPipeline(BasePipeline):
     def decode_video(self, latents, tiled=True, tile_size=(34, 34), tile_stride=(18, 16)):
         frames = self.vae.decode(latents, device=self.device, tiled=tiled, tile_size=tile_size, tile_stride=tile_stride)
         return frames
+    
+    def make_noise(
+    batch_size,
+    channels,
+    frames,
+    height,
+    width,
+    device,
+    dtype=torch.float16,
+    generator=None,
+    ):
+        """
+        Generate random noise tensor for diffusion sampling.
+
+        :param batch_size: Batch size (usually 1)
+        :param channels: Latent channels (usually 16)
+        :param frames: Number of frames
+        :param height: Height of latent
+        :param width: Width of latent
+        :param device: Target device
+        :param dtype: Torch dtype
+        :param generator: Optional generator for reproducibility
+        :return: List containing noise tensor [B, C, F, H, W]
+        """
+
+        if generator is not None:
+            noise = torch.randn(
+                batch_size,
+                channels,
+                frames,
+                height,
+                width,
+                generator=generator,
+                device=device,
+                dtype=dtype,
+            )
+        else:
+            noise = torch.randn(
+                batch_size,
+                channels,
+                frames,
+                height,
+                width,
+                device=device,
+                dtype=dtype,
+            )
+
+        return [noise]
 
 
     @torch.no_grad()
@@ -755,6 +804,104 @@ class WanUniAnimateVideoPipeline(BasePipeline):
         frames = self.tensor2video(frames[0])
 
         return frames
+    
+
+    
+    @torch.no_grad()
+    def continue_generation(
+        self,
+        previous_video,               # list of PIL images or tensor [T, H, W, C] or [C, T, H, W]
+        num_new_frames=40,
+        prompt="",
+        negative_prompt="",
+        guidance_scale=5.0,
+        num_inference_steps=50,
+        sigma_shift=5.0,
+        tiled=True,
+        tile_size=(30, 52),
+        tile_stride=(15, 26),
+    ):
+        """
+        Autoregressive extension of video beyond current length.
+        """
+
+        # ---- Prepare prompt encodings ----
+        self.load_models_to_device(["text_encoder", "vae", "dit"])
+
+        cond = [self.prompter.encode_prompt(prompt, positive=True)["context"].to(self.device)]
+        uncond = [self.prompter.encode_prompt(negative_prompt or "", positive=False)["context"].to(self.device)] if guidance_scale != 1.0 else None
+
+        # ---- Convert video to tensor if needed ----
+        if isinstance(previous_video, list):
+            previous_video = torch.stack([TF.to_tensor(f) * 2 - 1 for f in previous_video], dim=1).to(self.device)  # [C, T, H, W]
+        elif previous_video.ndim == 4 and previous_video.shape[0] != 3:
+            previous_video = previous_video.permute(1, 0, 2, 3).to(self.device)  # [C, T, H, W]
+
+        # ---- Encode the previous video frames ----
+        latents = self.vae.encode([previous_video], device=self.device, tiled=tiled, tile_size=tile_size, tile_stride=tile_stride)[0]
+
+        # ---- Prepare noise for continuation ----
+        new_frames = num_new_frames
+        _, e_t, e_h, e_w = latents.shape
+        new_latents = torch.zeros((1, e_t + new_frames, e_h, e_w), device=self.device, dtype=self.torch_dtype)
+        new_latents[:, :e_t] = latents
+
+        # Initialize new noisy latents
+        new_latents[:, e_t:] = self.make_noise(
+            batch_size=1,
+            channels=latents.shape[1],
+            frames=new_frames,
+            height=e_h,
+            width=e_w,
+            device=self.device,
+            dtype=self.torch_dtype,
+        )[0]
+
+        # ---- Scheduler for continuation ----
+        continuation_sigmas = self.get_sampling_sigmas(num_inference_steps, shift=sigma_shift)
+        continuation_timesteps = torch.tensor(continuation_sigmas, device=self.device)
+
+        seq_len = (e_t + new_frames)  # approximate sequence length, adjust if needed
+
+        # ---- Run denoising for new frames ----
+        for i, t in enumerate(continuation_timesteps):
+
+            timestep = torch.stack([t])
+
+            # Predict noise for ONLY new frames
+            current_latents = new_latents[:, e_t:]  # [B, new_frames, H, W]
+
+            noise_pred = self.predict_noise_at_timestep(
+                timestep=timestep,
+                latents=[current_latents],
+                cond=cond,
+                uncond=uncond,
+                window_size=None,
+                window_stride=None,
+                tile_size=None,
+                tile_stride=None,
+                guidance_scale=guidance_scale,
+                seq_len=seq_len,
+                loop=False,
+                tile_horizontal=False,
+                tile_vertical=False,
+                use_cfg_alpha=False
+            )
+
+            # Step
+            current_latents = self.scheduler.step(
+                noise_pred.unsqueeze(0),
+                t,
+                current_latents.unsqueeze(0)
+            )[0]
+
+            new_latents[:, e_t:] = current_latents
+
+        # ---- Decode extended video ----
+        decoded = self.vae.decode([new_latents], device=self.device, tiled=tiled, tile_size=tile_size, tile_stride=tile_stride)[0]
+        decoded_video = self.tensor2video(decoded)
+
+        return decoded_video
 
 
 
